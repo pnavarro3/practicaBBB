@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Domótica BBB</title>
+  <style>
+    body { font-family: Arial; text-align: center; }
+    .slider { width: 200px; }
+  </style>
+</head>
+<body>
+  <h1>Panel Domótico</h1>
+  <h3>Luces</h3>
+  <div>
+    LED 1:
+    <button onclick="fetch('/led/1/on')">Encender</button>
+    <button onclick="fetch('/led/1/off')">Apagar</button><br>
+    Brillo:
+    <input type="range" min="0" max="100" oninput="fetch('/brillo/1',{method:'POST',body:'value='+this.value,headers:{'Content-Type':'application/x-www-form-urlencoded'}})">
+  </div>
+  <div>
+    LED 2:
+    <button onclick="fetch('/led/2/on')">Encender</button>
+    <button onclick="fetch('/led/2/off')">Apagar</button><br>
+    Brillo:
+    <input type="range" min="0" max="100" oninput="fetch('/brillo/2',{method:'POST',body:'value='+this.value,headers:{'Content-Type':'application/x-www-form-urlencoded'}})">
+  </div>
+
+  <h3>Estado del garaje</h3>
+  <p>Coche: {{ status }} (Distancia: {{ distance }} cm)</p>
+</body>
+</html>
