@@ -27,6 +27,25 @@
   </div>
 
   <h3>Estado del garaje</h3>
-  <p>Coche: {{ status }} (Distancia: {{ distance }} cm)</p>
+  <p>Coche: <span id="status">{{ status }}</span> (Distancia: <span id="distance">{{ distance }}</span> cm)</p>
+
+  <script>
+    // Polling simple: consulta /distance cada segundo y actualiza la página
+    async function actualizar() {
+      try {
+        const res = await fetch('/distance', {cache: 'no-store'});
+        if (!res.ok) return;
+        const j = await res.json();
+        const dist = j.distance === null ? '---' : j.distance;
+        document.getElementById('distance').textContent = dist;
+        document.getElementById('status').textContent = j.status || 'Desconocido';
+      } catch (e) {
+        // silencioso: no interrumpir la UI
+      }
+    }
+    // Primera actualización y luego cada 1s
+    actualizar();
+    setInterval(actualizar, 1000);
+  </script>
 </body>
 </html>
