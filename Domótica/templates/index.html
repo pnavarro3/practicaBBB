@@ -76,7 +76,7 @@
         renderControls(j.outputs||{});
         if(j.sensors){
           tempEl.textContent = j.sensors.temp_c!==null? j.sensors.temp_c : '—';
-          lightEl.textContent = j.sensors.light!==null? (j.sensors.light? 'Luz' : 'Oscuro') : '—';
+          lightEl.textContent = j.sensors.light!==null? (j.sensors.light? 'Oscuro' : 'Claro') : '—';
         }
       }catch(e){ addLog('Error obtener estado: '+e.message); }
     }
@@ -104,7 +104,7 @@
         if(!res.ok) throw new Error(res.status);
         const j = await res.json();
         if(j.temp_c!==undefined) tempEl.textContent = j.temp_c;
-        if(j.light!==undefined) lightEl.textContent = j.light? 'Luz' : 'Oscuro';
+        if(j.light!==undefined) lightEl.textContent = j.light? 'Claro' : 'Oscuro';
         addLog(`Medición: ${j.temp_c} °C, luz=${j.light}`);
       }catch(e){ addLog('Error medir: '+e.message); }
       finally{ measureBtn.disabled=false; }
@@ -113,10 +113,11 @@
     (function init(){
       renderControls();
       fetchStatus();
-      setInterval(fetchStatus,5000);
+      setInterval(fetchStatus,3000);
       measureBtn.addEventListener('click',measureNow);
       clearLogBtn.addEventListener('click',()=>{logEl.textContent='Sin eventos';});
       addLog('Interfaz cargada');
     })();
   </script>
 </body>
+</html>
