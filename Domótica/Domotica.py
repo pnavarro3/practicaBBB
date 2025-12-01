@@ -207,18 +207,28 @@ def index():
 @app.route("/api/status", methods=["GET"])
 def api_status():
     outputs = get_outputs_state()
+    # mostrar temperatura solo si luz o calefacción están encendidas
+    show_temp = bool(outputs.get("led1", 0) or outputs.get("led2", 0))
+    temp = None
+    if show_temp:
+        temp = latest.get("temp_c")
     return jsonify({
         "outputs": outputs,
         "sensors": {
-            "temp_c": latest["temp_c"],
+            "temp_c": temp,
             "light": latest["light"],
             "ts": latest["ts"],
             "saturated": latest["saturated"],
             "car_parked": latest["car_parked"],
             "button_pressed": latest["button_pressed"]
         },
+<<<<<<< HEAD
         "manual_override_until": latest["manual_override_until"],
         "mode": latest["mode"]
+=======
+        "manual_override_heating": latest["manual_override_heating"],
+        "light_timer_until": latest["light_timer_until"]
+>>>>>>> 10c89b6a046a7f3918315ca0b27443c700979e4a
     })
 
 
@@ -241,8 +251,12 @@ def api_measure():
         "ts": latest["ts"],
         "saturated": latest["saturated"],
         "car_parked": latest["car_parked"],
+<<<<<<< HEAD
         "button_pressed": latest["button_pressed"],
         "outputs": outputs,
         "mode": latest["mode"],
         "manual_override_until": latest["manual_override_until"]
     })
+=======
+        "button_pressed
+>>>>>>> 10c89b6a046a7f3918315ca0b27443c700979e4a
