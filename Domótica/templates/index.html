@@ -3,31 +3,60 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Domótica - Panel</title>
+  <title>Domótica - Garaje</title>
   <style>
     body{font-family:system-ui,Arial;padding:18px;background:#f5f7fb;color:#111}
     .card{background:#fff;border-radius:8px;padding:14px;box-shadow:0 1px 6px rgba(0,0,0,.07);margin-bottom:12px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
     button{cursor:pointer;border:0;padding:8px 12px;border-radius:6px;font-weight:600}
     .on{background:#16a34a;color:#fff}.off{background:#ef4444;color:#fff}.action{background:#2563eb;color:#fff}
-    #log{white-space:pre-wrap;font-family:monospace;max-height:180px;overflow:auto;background:#0f172a;color:#e6eef8;padding:8px;border-radius:6px}
     .small{font-size:.9rem;color:#555}
+    .sensor-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .status-ok{color:#16a34a;font-weight:700}
+    .status-bad{color:#ef4444;font-weight:700}
+    .muted{color:#666;font-size:.9rem}
   </style>
 </head>
 <body>
-  <h1>Domótica</h1>
-  <p class="small">Temperatura, luz y control de LEDs</p>
+  <h1>Domótica - Garaje</h1>
+  <p class="small">Control de luz del garaje y calefacción. Botón simula detección de coche.</p>
 
   <div class="grid">
     <section class="card">
-      <h2>LEDs</h2>
-      <div id="outputs"></div>
+      <h2>Modo</h2>
+      <div style="margin-bottom:10px">
+        <div style="font-weight:700">Modo actual: <span id="modeLabel" class="muted">—</span></div>
+        <div style="margin-top:8px">
+          <button id="modeBtn" class="action">Cambiar modo</button>
+        </div>
+      </div>
+
+      <h2 style="margin-top:14px">Controles</h2>
+      <div style="margin-bottom:10px">
+        <div style="font-weight:700">Luz garaje (LED1)</div>
+        <div class="small">Automático: se enciende si hay coche y está oscuro. Manual: puedes encender/apagar.</div>
+        <div style="margin-top:8px" id="lightControl"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div style="font-weight:700">Calefacción (LED2)</div>
+        <div class="small">Automático: se enciende si la temperatura baja de 20 °C. Manual: puedes encender/apagar.</div>
+        <div style="margin-top:8px" id="heatControl"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div style="font-weight:700">Coche aparcado</div>
+        <div id="carControl"></div>
+      </div>
     </section>
 
     <section class="card">
-      <h2>Sensores</h2>
-      <p>Temperatura: <strong id="temp">—</strong> °C</p>
-      <p>Luz: <strong id="light">—</strong></p>
+      <h2>Estado sensores</h2>
+      <div class="sensor-row"><div>Temperatura</div><div><strong id="temp">—</strong> °C</div></div>
+      <div class="sensor-row"><div>Luz ambiente</div><div><strong id="light">—</strong></div></div>
+      <div class="sensor-row"><div>Botón simulador</div><div><strong id="btn">—</strong></div></div>
+      <div class="sensor-row"><div>Coche aparcado</div><div><strong id="car">—</strong></div></div>
+      <div class="sensor-row"><div>Overrides manuales</div><div class="muted" id="overrides">—</div></div>
       <button id="measureBtn" class="action">Medir ahora</button>
     </section>
 
@@ -39,14 +68,20 @@
   </div>
 
   <script>
-    const API = { status: '/api/status', toggle: '/api/toggle', measure: '/api/measure' };
-    const OUTPUTS = [{name:'led1',label:'LED 1'},{name:'led2',label:'LED 2'}];
-    const outputsEl = document.getElementById('outputs');
+    const API = { status: '/api/status', toggle: '/api/toggle', measure: '/api/measure', mode: '/api/mode', car: '/api/car' };
+    const outputsElLight = document.getElementById('lightControl');
+    const outputsElHeat = document.getElementById('heatControl');
+    const carControl = document.getElementById('carControl');
     const tempEl = document.getElementById('temp');
     const lightEl = document.getElementById('light');
+    const btnEl = document.getElementById('btn');
+    const carEl = document.getElementById('car');
+    const overridesEl = document.getElementById('overrides');
     const logEl = document.getElementById('log');
     const measureBtn = document.getElementById('measureBtn');
     const clearLogBtn = document.getElementById('clearLog');
+    const modeBtn = document.getElementById('modeBtn');
+    const modeLabel = document.getElementById('modeLabel');
 
     function addLog(text){
       const ts = new Date().toLocaleTimeString();
@@ -54,18 +89,24 @@
       logEl.textContent = `${ts}  ${text}\n` + logEl.textContent;
     }
 
-    function renderControls(states={}){
-      outputsEl.innerHTML='';
-      for(const o of OUTPUTS){
-        const state = states[o.name]==1?1:0;
-        const row = document.createElement('div');
-        row.style.display='flex';row.style.justifyContent='space-between';row.style.marginBottom='8px';
-        const label = document.createElement('div'); label.innerHTML=`<div style="font-weight:600">${o.label}</div><div class="small">${o.name}</div>`;
-        const btn = document.createElement('button'); btn.textContent = state?'ON':'OFF';
-        btn.className = state?'on':'off';
-        btn.onclick = ()=> toggleOutput(o.name, state?0:1, btn);
-        row.appendChild(label); row.appendChild(btn); outputsEl.appendChild(row);
-      }
+    function renderCarControl(state){
+      carControl.innerHTML = '';
+      const label = document.createElement('div');
+      label.innerHTML = `<div style="font-weight:600">Estado actual: ${state?'<span class="status-ok">Sí</span>':'<span class="status-bad">No</span>'}</div>`;
+      const btn = document.createElement('button');
+      btn.textContent = state? 'Quitar coche' : 'Poner coche';
+      btn.className = state? 'off' : 'on';
+      btn.onclick = async ()=> {
+        try{
+          const val = state? 0 : 1;
+          const res = await fetch(API.car,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({car:val})});
+          if(!res.ok) throw new Error(res.status);
+          addLog(`Coche -> ${val? 'Sí' : 'No'} (manual)`);
+          await fetchStatus();
+        }catch(e){ addLog('Error toggle coche: '+e.message); }
+      };
+      carControl.appendChild(label);
+      carControl.appendChild(btn);
     }
 
     async function fetchStatus(){
@@ -73,51 +114,32 @@
         const res = await fetch(API.status);
         if(!res.ok) throw new Error(res.status);
         const j = await res.json();
-        renderControls(j.outputs||{});
+        const outs = j.outputs || {};
+        renderLightControl(outs.led1==1, j.manual_override_until? j.manual_override_until.led1 : 0);
+        renderHeatControl(outs.led2==1, j.manual_override_until? j.manual_override_until.led2 : 0);
+        renderCarControl(j.sensors.car_parked);
+
         if(j.sensors){
           tempEl.textContent = j.sensors.temp_c!==null? j.sensors.temp_c : '—';
           lightEl.textContent = j.sensors.light!==null? (j.sensors.light? 'Oscuro' : 'Claro') : '—';
+          btnEl.textContent = j.sensors.button_pressed? 'Pulsado' : 'No';
+          carEl.textContent = j.sensors.car_parked? 'Sí' : 'No';
         }
+        if(j.manual_override_until){
+          const now = Date.now()/1000;
+          const o1 = j.manual_override_until.led1 && j.manual_override_until.led1 > now ? `Luz: ${Math.round(j.manual_override_until.led1-now)}s` : '';
+          const o2 = j.manual_override_until.led2 && j.manual_override_until.led2 > now ? `Calefacción: ${Math.round(j.manual_override_until.led2-now)}s` : '';
+          overridesEl.textContent = (o1 || o2) ? `${o1} ${o2}` : 'Ninguno';
+        } else {
+          overridesEl.textContent = 'Ninguno';
+        }
+        modeLabel.textContent = j.mode === 'auto' ? 'Automático' : 'Manual';
+        modeBtn.textContent = j.mode === 'auto' ? 'Cambiar a Manual' : 'Cambiar a Automático';
       }catch(e){ addLog('Error obtener estado: '+e.message); }
     }
 
-    async function toggleOutput(name,value,btn){
-      const prev = btn.textContent; btn.disabled=true;
+    async function toggleMode(){
       try{
-        const res = await fetch(API.toggle,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,value})});
-        if(!res.ok) throw new Error(res.status);
-        const j = await res.json();
-        const newState = j.state!==undefined? j.state : value;
-        btn.textContent = newState? 'ON':'OFF';
-        btn.className = newState? 'on':'off';
-        addLog(`${name} -> ${newState?'ON':'OFF'}`);
-      }catch(e){
-        addLog('Error toggle '+name+': '+e.message);
-        btn.textContent = prev;
-      }finally{ btn.disabled=false; }
-    }
-
-    async function measureNow(){
-      measureBtn.disabled=true;
-      try{
-        const res = await fetch(API.measure,{method:'POST'});
-        if(!res.ok) throw new Error(res.status);
-        const j = await res.json();
-        if(j.temp_c!==undefined) tempEl.textContent = j.temp_c;
-        if(j.light!==undefined) lightEl.textContent = j.light? 'Claro' : 'Oscuro';
-        addLog(`Medición: ${j.temp_c} °C, luz=${j.light}`);
-      }catch(e){ addLog('Error medir: '+e.message); }
-      finally{ measureBtn.disabled=false; }
-    }
-
-    (function init(){
-      renderControls();
-      fetchStatus();
-      setInterval(fetchStatus,3000);
-      measureBtn.addEventListener('click',measureNow);
-      clearLogBtn.addEventListener('click',()=>{logEl.textContent='Sin eventos';});
-      addLog('Interfaz cargada');
-    })();
-  </script>
-</body>
-</html>
+        const cur = (await (await fetch(API.mode)).json()).mode;
+        const next = cur === 'auto' ? 'manual' : 'auto';
+        const res = await fetch(API.mode, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({mode: next})});
