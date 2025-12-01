@@ -15,6 +15,7 @@
     .status-ok{color:#16a34a;font-weight:700}
     .status-bad{color:#ef4444;font-weight:700}
     .muted{color:#666;font-size:.9rem}
+    pre{white-space:pre-wrap;font-family:monospace}
   </style>
 </head>
 <body>
@@ -39,25 +40,22 @@
 
       <div style="margin-top:12px">
         <div style="font-weight:700">Coche aparcado</div>
-        <div class="small">Forzar estado de detección de coche</div>
+        <div class="small">Forzar estado de detección de coche (lógica invertida)</div>
         <div style="margin-top:8px" id="carControl"></div>
       </div>
     </section>
 
     <section class="card">
       <h2>Estado</h2>
-      <div class="sensor-row"><div>Temperatura (visible si luz o calefacción ON)</div><div><strong id="temp">—</strong> °C</div></div>
+      <div class="sensor-row"><div>Temperatura</div><div><strong id="temp">—</strong> °C</div></div>
       <div class="sensor-row"><div>Luz ambiente</div><div><strong id="light">—</strong></div></div>
-      <div class="sensor-row"><div>Botón físico</div><div><strong id="btn">—</strong></div></div>
       <div class="sensor-row"><div>Coche aparcado</div><div><strong id="car">—</strong></div></div>
-      <div class="sensor-row"><div>Overrides calefacción</div><div class="muted" id="overrideHeat">—</div></div>
-      <div class="sensor-row"><div>Timer luz</div><div class="muted" id="lightTimer">—</div></div>
       <button id="measureBtn" class="action">Medir ahora</button>
     </section>
 
     <section class="card">
       <h2>Registros</h2>
-      <div id="log">Sin eventos</div>
+      <pre id="log">Sin eventos</pre>
       <div style="margin-top:8px"><button id="clearLog" class="action">Borrar</button></div>
     </section>
   </div>
@@ -76,10 +74,7 @@
     const carControl = document.getElementById('carControl');
     const tempEl = document.getElementById('temp');
     const lightEl = document.getElementById('light');
-    const btnEl = document.getElementById('btn');
     const carEl = document.getElementById('car');
-    const overrideHeatEl = document.getElementById('overrideHeat');
-    const lightTimerEl = document.getElementById('lightTimer');
     const logEl = document.getElementById('log');
     const measureBtn = document.getElementById('measureBtn');
     const clearLogBtn = document.getElementById('clearLog');
@@ -110,7 +105,6 @@
       };
       heatControl.appendChild(label);
       heatControl.appendChild(btn);
-      overrideHeatEl.textContent = manualOverride ? 'Manual activo' : 'Automático';
     }
 
     function renderLightControl(){
@@ -141,10 +135,11 @@
       btn.className = state? 'off' : 'on';
       btn.onclick = async ()=> {
         try{
-          const val = state? 0 : 1;
+          // Envío invertido: para lógica "al revés"
+          const val = state ? 1 : 0;
           const res = await fetch(API.car, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({car: val})});
           if(!res.ok) throw new Error(res.status);
-          addLog(`Coche -> ${val? 'Sí' : 'No'} (manual)`);
+          addLog(`Coche -> ${val? 'No detectado (valor invertido)' : 'Detectado (valor invertido)'} (manual)`);
           await fetchStatus();
         }catch(e){ addLog('Error toggle coche: '+e.message); }
       };
@@ -162,17 +157,10 @@
         renderLightControl();
         renderCarControl(j.sensors.car_parked);
 
+        // temperatura siempre visible
         tempEl.textContent = j.sensors.temp_c!==null? j.sensors.temp_c : '—';
         lightEl.textContent = j.sensors.light!==null? (j.sensors.light? 'Oscuro' : 'Claro') : '—';
-        btnEl.textContent = j.sensors.button_pressed? 'Pulsado' : 'No';
         carEl.textContent = j.sensors.car_parked? 'Sí' : 'No';
-
-        if(j.light_timer_until && j.light_timer_until > Date.now()/1000){
-          const rem = Math.round(j.light_timer_until - Date.now()/1000);
-          lightTimerEl.textContent = `${rem}s restantes`;
-        } else {
-          lightTimerEl.textContent = '—';
-        }
       }catch(e){ addLog('Error obtener estado: '+e.message); }
     }
 

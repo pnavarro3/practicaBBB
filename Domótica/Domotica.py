@@ -11,7 +11,7 @@ except Exception:
 
 app = Flask(__name__)
 
-LED_PINS = {"led1": "P8_10", "led2": "P8_12"}  # led1 = luz garaje, led2 = calefacción
+LED_PINS = {"led1": "P8_10", "led2": "P8_12"}
 LIGHT_PIN = "P8_14"
 LM35_ADC_PIN = "P9_39"
 BUTTON_PIN = "P8_16"
@@ -36,8 +36,8 @@ latest = {
     "car_parked": False,
     "button_pressed": False,
     "outputs": {"led1": 0, "led2": 0},
-    "manual_override_heating": False,   # True si calefacción fue activada manualmente y debe permanecer hasta apagado manual
-    "light_timer_until": 0.0            # timestamp hasta el que la luz debe permanecer encendida por pulsos
+    "manual_override_heating": False,
+    "light_timer_until": 0.0
 }
 
 def hw_setup():
@@ -138,7 +138,6 @@ def set_output(name, value, manual=True):
             return False, str(e)
 
 def apply_heating_logic(temp):
-    # Si calefacción fue activada manualmente y está en modo manual persistente, no cambiar
     if latest.get("manual_override_heating"):
         return
     if temp is None:
@@ -153,22 +152,18 @@ def apply_light_logic(now):
     car = latest.get("car_parked", False)
     timer_until = latest.get("light_timer_until", 0.0)
 
-    # Si hay coche y está oscuro -> luz ON permanente mientras haya coche
     if car and light_sensor == 1:
         set_output("led1", 1, manual=False)
         return
 
-    # Si hay timer activo -> mantener luz encendida
     if timer_until and timer_until > now:
         set_output("led1", 1, manual=False)
         return
 
-    # Si está claro -> apagar (salvo timer)
     if light_sensor == 0:
         set_output("led1", 0, manual=False)
         return
 
-    # Si está oscuro y no hay coche -> apagar (salvo timer)
     if light_sensor == 1 and not car:
         set_output("led1", 0, manual=False)
         return
@@ -193,7 +188,6 @@ def background_reader(interval=0.2):
                 button_counter = 0
             if button_counter >= required_button_count:
                 latest["car_parked"] = True
-            # apply automatic logic
             apply_heating_logic(t)
             apply_light_logic(ts)
         except Exception:
@@ -207,30 +201,21 @@ def index():
 @app.route("/api/status", methods=["GET"])
 def api_status():
     outputs = get_outputs_state()
-    # mostrar temperatura solo si luz o calefacción están encendidas
-    show_temp = bool(outputs.get("led1", 0) or outputs.get("led2", 0))
-    temp = None
-    if show_temp:
-        temp = latest.get("temp_c")
+    # ahora siempre devolvemos temperatura (si está disponible)
+    temp = latest.get("temp_c")
     return jsonify({
         "outputs": outputs,
         "sensors": {
             "temp_c": temp,
-            "light": latest["light"],
-            "ts": latest["ts"],
-            "saturated": latest["saturated"],
-            "car_parked": latest["car_parked"],
-            "button_pressed": latest["button_pressed"]
+            "light": latest.get("light"),
+            "ts": latest.get("ts"),
+            "saturated": latest.get("saturated"),
+            "car_parked": latest.get("car_parked"),
+            "button_pressed": bool(latest.get("button_pressed", False))
         },
-<<<<<<< HEAD
-        "manual_override_until": latest["manual_override_until"],
-        "mode": latest["mode"]
-=======
-        "manual_override_heating": latest["manual_override_heating"],
-        "light_timer_until": latest["light_timer_until"]
->>>>>>> 10c89b6a046a7f3918315ca0b27443c700979e4a
+        "manual_override_heating": latest.get("manual_override_heating", False),
+        "light_timer_until": latest.get("light_timer_until", 0.0)
     })
-
 
 @app.route("/api/measure", methods=["POST", "GET"])
 def api_measure():
@@ -243,20 +228,75 @@ def api_measure():
     latest["saturated"] = bool(sat)
     latest["button_pressed"] = bool(btn)
     outputs = get_outputs_state()
-    show_temp = bool(outputs.get("led1", 0) or outputs.get("led2", 0))
-    temp = t if show_temp else None
     return jsonify({
-        "temp_c": temp,
+        "temp_c": latest.get("temp_c"),
         "light": l,
         "ts": latest["ts"],
         "saturated": latest["saturated"],
         "car_parked": latest["car_parked"],
-<<<<<<< HEAD
         "button_pressed": latest["button_pressed"],
         "outputs": outputs,
-        "mode": latest["mode"],
-        "manual_override_until": latest["manual_override_until"]
+        "manual_override_heating": latest.get("manual_override_heating", False),
+        "light_timer_until": latest.get("light_timer_until", 0.0)
     })
-=======
-        "button_pressed
->>>>>>> 10c89b6a046a7f3918315ca0b27443c700979e4a
+
+@app.route("/api/toggle", methods=["POST"])
+def api_toggle():
+    j = request.get_json(force=True, silent=True)
+    if not j:
+        return jsonify({"error": "missing json body"}), 400
+    name = j.get("name")
+    if name not in ("led2",):
+        return jsonify({"error": "invalid name"}), 400
+    try:
+        value = 1 if int(j.get("value", 0)) else 0
+    except Exception:
+        return jsonify({"error": "invalid value"}), 400
+    ok, err = set_output(name, value, manual=True)
+    if not ok:
+        return jsonify({"error": err}), 500
+    if name == "led2":
+        latest["manual_override_heating"] = True if value == 1 else False
+    outputs = get_outputs_state()
+    return jsonify({"state": value, "outputs": outputs, "manual_override_heating": latest.get("manual_override_heating", False)})
+
+@app.route("/api/light_pulse", methods=["POST"])
+def api_light_pulse():
+    now = time.time()
+    light_sensor = latest.get("light")
+    car = latest.get("car_parked", False)
+    if light_sensor is None:
+        return jsonify({"error": "light sensor unknown"}), 400
+    if light_sensor == 0:
+        latest["light_timer_until"] = now + 10.0
+        set_output("led1", 1, manual=False)
+        return jsonify({"light_timer_until": latest["light_timer_until"], "duration": 10})
+    else:
+        if not car:
+            latest["light_timer_until"] = now + 20.0
+            set_output("led1", 1, manual=False)
+            return jsonify({"light_timer_until": latest["light_timer_until"], "duration": 20})
+        else:
+            return jsonify({"light_timer_until": latest["light_timer_until"], "duration": 0, "note": "already on due to car and dark"})
+
+@app.route("/api/car", methods=["POST"])
+def api_car():
+    j = request.get_json(force=True, silent=True)
+    if not j or "car" not in j:
+        return jsonify({"error": "missing car"}), 400
+    try:
+        val = 1 if int(j.get("car", 0)) else 0
+    except Exception:
+        return jsonify({"error": "invalid car value"}), 400
+    # lógica invertida: 1 -> no coche, 0 -> hay coche
+    latest["car_parked"] = not bool(val)
+    return jsonify({"car_parked": latest["car_parked"]})
+
+if __name__ == "__main__":
+    print("DEBUG: entrando en __main__", flush=True)
+    hw_setup()
+    print("DEBUG: hw_setup completado", flush=True)
+    t = threading.Thread(target=background_reader, args=(0.2,), daemon=True)
+    t.start()
+    print("DEBUG: background_reader arrancado", flush=True)
+    app.run(host="0.0.0.0", port=5000)
